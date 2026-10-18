@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -155,9 +155,11 @@ const GROUPS: { group: string; endpoints: EndpointDoc[] }[] = [
   },
 ];
 
-export async function GET(): Promise<NextResponse> {
-  const domain = process.env.COZE_PROJECT_DOMAIN_DEFAULT ?? 'localhost:5000';
-  const baseUrl = `https://${domain.replace(/^https?:\/\//, '')}`;
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  const domain = process.env.RENDER_EXTERNAL_URL ?? process.env.COZE_PROJECT_DOMAIN_DEFAULT;
+  const baseUrl = domain
+    ? (/^https?:\/\//.test(domain) ? domain : `https://${domain}`).replace(/\/$/, '')
+    : request.nextUrl.origin;
   return NextResponse.json({
     name: '投资事件情报平台 Open API',
     version: 'v7',

@@ -81,7 +81,7 @@ coze build && coze start   # 生产
 
 ### 纯前端静态版（`output/`）
 
-`output/index.html` + `output/frontend/style.css` + `output/frontend/app.js`：零依赖单页应用，可直接部署到 GitHub Pages 等任意静态托管；`app.js` 顶部 `API_BASE` 为 API 调用占位（指向本平台 `/api`），请求失败时自动降级内置模拟数据渲染。
+`output/index.html` + `output/frontend/`：零依赖单页应用，可直接部署到 GitHub Pages 等任意静态托管；当前仓库 Pages 使用根目录 `index.html` 和 `frontend/`。后端公开地址填写在 `frontend/config.js` 的 `apiBase`，并同步导出副本；空地址才显示离线演示，已配置后的失败和空结果会如实展示。Render 自动部署配置见根目录 `render.yaml`，首次连接步骤见 `DEPLOYMENT.md`。
 
 ## 已知边界
 

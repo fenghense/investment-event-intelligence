@@ -55,6 +55,11 @@
         <div class="skeleton-card"></div>
       </div>
       <div id="event-cards"></div>
+      <div id="api-error" class="empty" role="alert" hidden>
+        <p class="empty-title">后端暂时不可用</p>
+        <p id="api-error-message"></p>
+        <p>免费服务首次唤醒可能需要约一分钟，请稍后重新搜索。</p>
+      </div>
       <div id="empty" class="empty" hidden>
         <p class="empty-title">没有找到相关事件</p>
         <ul class="empty-tips">
@@ -78,6 +83,8 @@
     <span>证据分级：公告级 &gt; 研报级 &gt; 媒体级 &gt; 社媒级 ｜ 传闻类信息以空心样式展示，请注意甄别</span>
   </footer>
 
+  <script src="frontend/config.js"></script>
+  <script src="frontend/api.js"></script>
   <script src="frontend/app.js"></script>
 </body>
 </html>

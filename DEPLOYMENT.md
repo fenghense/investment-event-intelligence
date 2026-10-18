@@ -28,6 +28,30 @@
 
 ## 二、把后端运行起来
 
+### Render 免费版（本项目已准备自动部署配置）
+
+根目录 `render.yaml` 定义了一个新加坡区域的免费 Node.js Web Service，分支为 `main`，每次推送都会自动部署；不会创建数据库或付费服务。
+
+1. 登录 Render，连接 GitHub，授权本仓库。
+2. 选择 **New → Blueprint**，选择本仓库和 `main` 分支，让 Render 读取 `render.yaml`。
+3. 在提示的 `IFIND_API_TOKEN` 输入框中填写 iFinD Token；接口地址已经配置好。创建前确认计划为 **Free**。
+4. 等待服务变为 **Live**，复制实际分配的 `https://…onrender.com` 地址。不要按服务名猜域名，Render 可能添加后缀。
+5. 按下一节将这个地址填入 Pages 配置并提交。
+
+如果从 **New → Web Service** 手动创建，选择本仓库 `main`、Node、Singapore、Free，并使用：
+
+- Build Command：`corepack pnpm install --frozen-lockfile --registry=https://registry.npmjs.org && corepack pnpm exec next build --webpack`
+- Start Command：`corepack pnpm exec next start --hostname 0.0.0.0 --port $PORT`
+- 环境变量：`NODE_VERSION=24`、`NEXT_TELEMETRY_DISABLED=1`，以及模板中的三个 `IFIND_*` 变量。
+- Health Check Path：`/api/health`。
+- Auto-Deploy：每次提交自动部署（On Commit）。
+
+首次创建时可能需要完成账号验证；如页面要求付费，先停下确认，不要自动升级。免费实例空闲 15 分钟会休眠，再次访问唤醒通常约一分钟；内存事件库也会随进程重启而重建。面试展示前先打开后端预热一次。
+
+官方参考：[Render Next.js 部署](https://render.com/docs/deploy-nextjs-app)、[免费版限制](https://render.com/docs/free)。
+
+### 其他 Node.js 环境
+
 若原扣子编程项目已经发布，可以使用它的 HTTPS 发布地址，无需再部署一份后端。
 
 若选择其他平台，需要创建支持 Node.js 的 Web 服务，而不是静态站点。工作目录选择含 `package.json` 的目录。普通 Node.js 部署可使用以下命令（需要 Node.js 20.9+ 和 pnpm 9，具体以所选平台与依赖要求为准）：
@@ -50,22 +74,24 @@ pnpm exec next start --hostname 0.0.0.0 --port 5000
 
 Pages 只托管静态前端，不能运行本项目的 `/api/*` 后端路由。当前 Pages 使用仓库根 `index.html` 和 `frontend/`，不是 `output/` 目录。
 
-取得后端的 HTTPS 地址后，修改 `frontend/app.js` 顶部：
+取得后端的 HTTPS 地址后，修改 `frontend/config.js`（导出副本 `output/frontend/config.js` 保持同步）：
 
 ```js
-var API_BASE = 'https://你的后端域名';
+window.APP_CONFIG = {
+  apiBase: 'https://你的后端域名'
+};
 ```
 
 填写项目后端域名，不要填 iFinD 域名、API 密钥或末尾 `/api`。代码会追加 `/api/...`。后端 `src/middleware.ts` 已包含跨域响应与 OPTIONS 预检支持，部署平台还需允许公开访问该 API，不能被平台登录页拦截。
 
-当前静态前端还有以下待接入调整，不能只填写地址就视为实时数据接入完成：
+静态前端已包含以下接入行为：
 
-1. `fetchEvents` 有关键词时应请求 `/api/search?live=1&q=...`，才能触发实时数据采集；无关键词时应请求 `/api/events`。
-2. 删除 `if (!list.length) throw new Error('empty');`，将合法的空列表呈现为空结果，不能误当故障回退演示数据。
-3. 根据返回的 `live.sources` 区分上游实时成功、无结果或失败；接口返回 HTTP 200 不代表 iFinD 已成功取数。
-4. 若要展示完整证据时间线，还需调用 `/api/events/{id}`，将其中的 `evidence` 数据映射到详情弹窗；搜索列表本身不包含完整证据。
+1. 有关键词时请求 `/api/search?live=1&q=...` 触发实时采集；无关键词时请求 `/api/events`。
+2. 合法空列表呈现为空结果；已配置后端时的请求失败会明确报错，不再偷偷替换为演示数据。只有配置地址为空时才进入明确标注的离线演示模式。
+3. 根据 `live.sources` 展示各数据源有数据、无新数据或不可用；首页明确标记事件库可能包含初始化演示记录，HTTP 200 不等于上游实时取数成功。
+4. 点击事件后调用 `/api/events/{id}` 加载证据；关闭弹窗后晚到的响应不会重新打开弹窗，旧搜索结果也不会覆盖新搜索。
 
-本次源码上传保留了既有 Pages 页面行为，没有代填未知的后端地址。
+配置提交后，GitHub Pages 会按已有分支发布设置自动更新；Render 也会按 `main` 的提交自动部署。两者互相独立，首次接通必须等后端部署成功并填写其真实地址。API 密钥不进入 Pages 文件。
 
 ## 四、验证配置
 
@@ -75,5 +101,7 @@ var API_BASE = 'https://你的后端域名';
 2. `GET /api/ifind/quota`：`configured: true` 仅表示配置值非空，不验证 Token 是否有效。
 3. `GET /api/search?q=宁德时代&live=1`：会实际调用数据源并消耗其额度；检查 `live.sources` 中 `ifind` 的状态及错误信息。`ok` 是有数据，`empty` 是成功但无结果，`failed` 是调用失败。
 4. 从 Pages 发起请求，确认浏览器 Network 中请求发往后端域名，并且没有 CORS 或 HTTPS 错误。
+
+本地回归测试：`corepack pnpm run test:pages`。健康检查 `/api/health` 不调用上游 API、不消耗 iFinD 额度。
 
 如果 `Main.zip` 中包含旧密钥，即使本次展开的源码已排除密钥，该归档及旧提交仍可能公开包含它们；本次上传未修改你原先上传的归档。

@@ -1,15 +1,14 @@
 /* ============================================================
  * 投资事件情报平台 · 纯前端版逻辑
- * 零依赖原生 JS：优先调用后端开放 API，失败时降级内置模拟数据。
+ * 零依赖原生 JS：未配置后端时明确展示演示数据；已配置时如实展示 API 结果或错误。
  * ============================================================ */
 
 /**
- * API 调用占位：
- * - 部署在本平台同源时：保持 '' 即可（请求 /api/*）。
- * - 部署到 GitHub Pages 等外部静态托管时：改为平台绝对地址，
- *   例如 'https://your-app.dev.coze.site'（后端已全局放开 CORS）。
+ * API 地址集中在 frontend/config.js 中，密钥只配置在后端环境变量里。
+ * apiBase 为空时为离线演示；已配置后的失败或空结果绝不冒充演示数据。
  */
-var API_BASE = '';
+var API_BASE = (window.APP_CONFIG && window.APP_CONFIG.apiBase) || '';
+var apiClient = EventApi.createClient({ baseUrl: API_BASE });
 
 /** 词表（与后端 src/lib/domain/vocabulary.ts 对齐，禁止各处自定义） */
 var STATUS_LABELS = {
@@ -115,28 +114,19 @@ var MOCK_EVENTS = [
   }
 ];
 
-/* ---------------- 数据访问层：真实 API 优先，模拟数据兜底 ---------------- */
+/* ---------------- 数据访问层：后端结果与离线演示明确区分 ---------------- */
 
 function fetchEvents(query) {
-  var url = API_BASE + '/api/search?q=' + encodeURIComponent(query || '');
-  return fetch(url, { headers: { 'Accept': 'application/json' } })
-    .then(function (res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.json();
-    })
-    .then(function (data) {
-      var list = (data && data.events) || [];
-      if (!list.length) throw new Error('empty');
-      return { origin: 'remote', events: list.map(normalizeEvent) };
-    })
-    .catch(function () {
-      // 降级：模拟数据本地过滤
-      var q = (query || '').trim();
-      var filtered = !q ? MOCK_EVENTS : MOCK_EVENTS.filter(function (e) {
-        return (e.title + e.subject + (e.summary || '')).indexOf(q) >= 0;
-      });
-      return { origin: 'mock', events: filtered };
+  if (!apiClient.configured) {
+    var q = (query || '').trim();
+    var filtered = !q ? MOCK_EVENTS : MOCK_EVENTS.filter(function (e) {
+      return (e.title + e.subject + (e.summary || '')).indexOf(q) >= 0;
     });
+    return Promise.resolve({ origin: 'mock', events: filtered });
+  }
+  return apiClient.search(query).then(function (data) {
+    return { origin: 'remote', events: data.events.map(normalizeEvent), live: data.live };
+  });
 }
 
 /** 后端事件结构 → 前端渲染结构（字段容错映射） */
@@ -158,7 +148,7 @@ function normalizeEvent(e) {
       return {
         sourceName: ev.sourceName || '', sourceType: ev.sourceType || 'media',
         evidenceType: ev.evidenceType || 'fact',
-        weight: (ev.weight && ev.weight.total >= 60) ? 'high' : (ev.weight ? 'low' : (ev.weight || 'high')),
+        weight: typeof ev.weight === 'string' ? ev.weight : ((ev.weight && ev.weight.total >= 60) ? 'high' : 'low'),
         title: ev.title || '', disclosedAt: fmtTime(ev.disclosedAt)
       };
     })
@@ -181,6 +171,7 @@ var elEmpty = document.getElementById('empty');
 var elMeta = document.getElementById('result-meta');
 var elOrigin = document.getElementById('result-origin');
 var elApiStatus = document.getElementById('api-status');
+var elError = document.getElementById('api-error');
 
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -188,20 +179,27 @@ function escapeHtml(s) {
   });
 }
 
-function render(list, origin, query) {
+function render(list, origin, query, live) {
   elLoading.hidden = true;
+  elError.hidden = true;
+  elOrigin.textContent = origin === 'remote' ? '后端事件库（可能含初始化演示记录）' : '内置演示数据（尚未配置后端地址）';
+  if (origin === 'remote' && live && Array.isArray(live.sources)) {
+    var names = { ifind: 'iFinD', cninfo: '巨潮', media: '财经媒体' };
+    elOrigin.textContent = '后端结果 · 本次采集：' + live.sources.map(function (source) {
+      var status = source.status === 'ok' ? source.count + ' 条' : (source.status === 'empty' ? '无新数据' : '不可用');
+      return (names[source.key] || source.key) + ' ' + status;
+    }).join('；');
+  }
+  elApiStatus.textContent = origin === 'remote' ? 'API 已连接' : '演示数据模式';
+  elApiStatus.className = 'api-status ' + (origin === 'remote' ? 'ok' : 'mock');
   if (!list.length) {
     elCards.innerHTML = '';
     elEmpty.hidden = false;
     elMeta.textContent = '';
-    elOrigin.textContent = '';
     return;
   }
   elEmpty.hidden = true;
   elMeta.textContent = '共 ' + list.length + ' 个事件' + (query ? ' · 关键词「' + query + '」' : '');
-  elOrigin.textContent = origin === 'remote' ? '数据源：实时 API' : '数据源：内置演示数据（API 未连通）';
-  elApiStatus.textContent = origin === 'remote' ? 'API 已连接' : '演示数据模式';
-  elApiStatus.className = 'api-status ' + (origin === 'remote' ? 'ok' : 'mock');
 
   elCards.innerHTML = list.map(function (e) {
     var isRumorOnly = e.evidences.length && e.evidences.every(function (ev) { return ev.evidenceType === 'rumor'; });
@@ -234,7 +232,27 @@ function render(list, origin, query) {
   });
 }
 
+var detailSequence = 0;
+
 function openDetail(e) {
+  var sequence = ++detailSequence;
+  document.getElementById('detail-mask').hidden = false;
+  document.body.style.overflow = 'hidden';
+  if (currentOrigin !== 'remote') {
+    renderDetail(e);
+    return;
+  }
+  document.getElementById('detail-body').innerHTML = '<p>正在加载证据时间线…</p>';
+  apiClient.detail(e.id).then(function (data) {
+    if (sequence !== detailSequence) return;
+    renderDetail(normalizeEvent(Object.assign({}, data.event, { evidences: data.evidence })));
+  }).catch(function () {
+    if (sequence !== detailSequence) return;
+    document.getElementById('detail-body').innerHTML = '<p>证据详情暂时无法加载，请关闭后重试。</p>';
+  });
+}
+
+function renderDetail(e) {
   var body = document.getElementById('detail-body');
   var high = e.evidences.filter(function (ev) { return ev.weight !== 'low'; });
   var low = e.evidences.filter(function (ev) { return ev.weight === 'low'; });
@@ -279,6 +297,7 @@ function openDetail(e) {
 }
 
 function closeDetail() {
+  detailSequence += 1;
   document.getElementById('detail-mask').hidden = true;
   document.body.style.overflow = '';
 }
@@ -286,14 +305,33 @@ function closeDetail() {
 /* ---------------- 交互绑定 ---------------- */
 
 var currentList = [];
+var currentOrigin = 'mock';
+var searchSequence = 0;
 
 function doSearch(q) {
+  var sequence = ++searchSequence;
   elLoading.hidden = false;
+  elError.hidden = true;
   elCards.innerHTML = '';
   elEmpty.hidden = true;
+  elMeta.textContent = '正在查询…';
+  elOrigin.textContent = apiClient.configured ? '正在连接后端；首次唤醒可能需要约一分钟' : '演示数据';
   fetchEvents(q).then(function (r) {
+    if (sequence !== searchSequence) return;
     currentList = r.events;
-    render(r.events, r.origin, q);
+    currentOrigin = r.origin;
+    render(r.events, r.origin, q, r.live);
+  }).catch(function () {
+    if (sequence !== searchSequence) return;
+    currentList = [];
+    elLoading.hidden = true;
+    elEmpty.hidden = true;
+    elError.hidden = false;
+    elMeta.textContent = '';
+    elOrigin.textContent = '请求失败；未回退演示数据';
+    elApiStatus.textContent = 'API 连接失败';
+    elApiStatus.className = 'api-status mock';
+    document.getElementById('api-error-message').textContent = '请确认后端部署成功、地址正确且允许跨域访问。';
   });
 }
 

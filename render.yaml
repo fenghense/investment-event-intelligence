@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: investment-event-intelligence-api
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    autoDeployTrigger: commit
+    buildCommand: corepack pnpm install --frozen-lockfile --registry=https://registry.npmjs.org && corepack pnpm exec next build --webpack
+    startCommand: corepack pnpm exec next start --hostname 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: IFIND_MCP_URL
+        value: https://api-mcp.51ifind.com:8643/ds-mcp-servers/hexin-ifind-ds-mcp
+      - key: IFIND_STOCK_MCP_URL
+        value: https://api-mcp.51ifind.com:8643/ds-mcp-servers/hexin-ifind-ds-stock-mcp
+      - key: IFIND_API_TOKEN
+        sync: false
