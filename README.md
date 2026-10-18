@@ -65,6 +65,8 @@ LLM 在系统中是**增强者而非决策者**，规则优先、LLM 补充、�
 
 ### 快速开始
 
+密钥填写位置、各变量含义、后端部署与 Pages 接入步骤见 [DEPLOYMENT.md](./DEPLOYMENT.md)。公开配置模板为 [.env.example](./.env.example)；真实密钥仅填入本地 `.env` 或后端平台的环境变量。
+
 ```bash
 pnpm install
 cp .env.example .env   # 配置 iFinD 凭证（可选，缺失时显式降级）
@@ -88,7 +90,7 @@ coze build && coze start   # 生产
 - **`NAME-`/`ENT-` 兜底建档标的无行情验证**：非 A 股代码标的在标的页如实标注「暂无行情验证数据」。
 - **iFinD 返回为强相关片段文本**（非公告/新闻全文），以 标题+日期+externalId 构成可追溯标识，原始 JSON 存 `rawSnapshot`。
 - **事件存储为内存单例**（`globalThis`），重启即重置为种子语料；`SEED_VERSION` 变更触发重建。
-- **扶摇行情（Fuyao）未启用**：token 已配置但服务 URL 缺失，行情由 iFinD ds-stock-mcp 承接。
+- **扶摇行情（Fuyao）为可选项**：需要同时配置服务 URL 与 token；未配置时优先使用已配置的 iFinD ds-stock-mcp，否则明确降级为演示行情。
 
 ## 未做事项
 

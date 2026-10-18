@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>投资事件情报平台</title>
+  <meta name="description" content="多源投资事件情报与证据时间线：一个事件一张卡片，每条结论可追溯证据。" />
+  <link rel="stylesheet" href="frontend/style.css" />
+</head>
+<body>
+  <!-- 顶部通栏导航 -->
+  <header class="topnav">
+    <div class="topnav-inner">
+      <a class="brand" href="./index.html">
+        <span class="brand-badge">讯</span>
+        <span class="brand-name">投资事件情报</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#search" class="nav-link active">搜索</a>
+        <a href="#events" class="nav-link">事件监控</a>
+      </nav>
+      <span id="api-status" class="api-status" title="数据源状态"></span>
+    </div>
+  </header>
+
+  <main class="page">
+    <!-- 搜索区：页面唯一视觉焦点 -->
+    <section id="search" class="search-hero">
+      <h1 class="hero-title">查询投资事件情报与证据时间线</h1>
+      <p class="hero-sub">公告 · 新闻 · 媒体多源去重合并，一个事件一张卡片</p>
+      <form id="search-form" class="search-box" autocomplete="off">
+        <input
+          id="search-input"
+          class="search-input"
+          type="search"
+          placeholder="输入公司 / 标的 / 事件关键词，如：宁德时代"
+          aria-label="搜索关键词"
+        />
+        <button type="submit" class="search-btn">搜索</button>
+      </form>
+      <div id="hot-tags" class="hot-tags" aria-label="热门搜索"></div>
+    </section>
+
+    <!-- 结果状态条 -->
+    <section class="result-bar">
+      <span id="result-meta" class="result-meta"></span>
+      <span id="result-origin" class="result-origin"></span>
+    </section>
+
+    <!-- 事件卡片列表 -->
+    <section id="events" class="event-list" aria-live="polite">
+      <div id="loading" class="skeleton-wrap" hidden>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+      <div id="event-cards"></div>
+      <div id="empty" class="empty" hidden>
+        <p class="empty-title">没有找到相关事件</p>
+        <ul class="empty-tips">
+          <li>标的可能不存在或尚无披露</li>
+          <li>时间范围内无相关公告/新闻</li>
+          <li>试试更宽的关键词，如公司简称而非全称</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <!-- 事件详情弹层 -->
+  <div id="detail-mask" class="detail-mask" hidden>
+    <article class="detail-panel" role="dialog" aria-modal="true" aria-label="事件详情">
+      <button id="detail-close" class="detail-close" aria-label="关闭">×</button>
+      <div id="detail-body"></div>
+    </article>
+  </div>
+
+  <footer class="footer">
+    <span>证据分级：公告级 &gt; 研报级 &gt; 媒体级 &gt; 社媒级 ｜ 传闻类信息以空心样式展示，请注意甄别</span>
+  </footer>
+
+  <script src="frontend/app.js"></script>
+</body>
+</html>

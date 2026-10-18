@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "hexin-ifind-ds-mcp": {
+      "type": "streamablehttp",
+      "url": "https://api-mcp.51ifind.com:8643/ds-mcp-servers/hexin-ifind-ds-mcp",
+      "description": "同花顺 iFinD 金融数据（公告 search_notice / 新闻 search_news / 热门事件 search_trending_news / 行情 / 行业宏观指标 search_edb）",
+      "headers": {
+        "Authorization": "Bearer ${IFIND_API_TOKEN}"
+      }
+    },
+    "kuaicha-enterprise-mcp": {
+      "type": "streamablehttp",
+      "url": "https://api-mcp.51ifind.com:8643/ds-mcp-servers/kuaicha-enterprise-mcp",
+      "description": "同花顺快查企业数据（工商/股权/企业关系等企业维度信息）",
+      "headers": {
+        "Authorization": "Bearer ${IFIND_API_TOKEN}"
+      }
+    },
+    "hexin-law-mcp": {
+      "type": "streamablehttp",
+      "url": "https://api-mcp.51ifind.com:8643/ds-mcp-servers/hexin-law-mcp",
+      "description": "同花顺法律数据（法规/案例/法律文书等法律维度信息）",
+      "headers": {
+        "Authorization": "Bearer ${IFIND_API_TOKEN}"
+      }
+    }
+  }
+}
