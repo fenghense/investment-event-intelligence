@@ -2,6 +2,15 @@
 
 源码上传到 GitHub 不等于后端已部署。仓库中的 `Main.zip` 是手动上传的归档文件，不参与项目启动；部署平台应读取展开后的 `package.json`、`src/` 等文件。
 
+## 当前服务
+
+- Pages：<https://fenghense.github.io/investment-event-intelligence/>
+- Render 后端：<https://investment-event-intelligence-api.onrender.com>
+- 健康检查：<https://investment-event-intelligence-api.onrender.com/api/health>
+- 环境变量管理：[Render Environment](https://dashboard.render.com/web/srv-dbab368m7kps7385r50g/env)。更新 `IFIND_API_TOKEN` 后保存并重新部署。
+
+当前已创建新加坡区域 Free Web Service，连接本仓库 `main`，Auto-Deploy 为 On Commit。后续更新直接提交到 `main`；不要再创建重复服务。下面的创建步骤供迁移或重新部署时使用。
+
 ## 一、密钥在哪里填
 
 ### 本地运行
