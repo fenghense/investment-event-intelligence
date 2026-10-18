@@ -198,6 +198,10 @@ button { font-family: inherit; cursor: pointer; }
   display: flex; align-items: flex-start; justify-content: center;
   padding: 48px 16px;
 }
+/* 显式保留 hidden 状态，避免上面的 flex 布局覆盖浏览器的默认隐藏规则。 */
+.detail-mask[hidden] {
+  display: none;
+}
 .detail-panel {
   position: relative; width: 100%; max-width: 760px; max-height: 82vh;
   overflow-y: auto; background: var(--panel);
