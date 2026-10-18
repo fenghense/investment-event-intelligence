@@ -1,6 +1,8 @@
 import type { EventStatus } from '@/lib/domain/types';
 // stockAdapter 对本文件仅为 type-only 引用，runtime 单向依赖，无循环
 import { IfindStockAdapter } from '@/lib/adapters/ifind/stockAdapter';
+import { FuyaoHttpAdapter } from './httpAdapter';
+export { FuyaoHttpAdapter } from './httpAdapter';
 
 // ============================================================
 // 扶摇行情数据适配器
@@ -47,42 +49,6 @@ function round2(n: number): number {
 
 function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-// ---------- 扶摇 HTTP 真实接入骨架 ----------
-export class FuyaoHttpAdapter implements MarketDataAdapter {
-  readonly name = 'fuyao-http';
-
-  isConfigured(): boolean {
-    return Boolean(process.env.FUYAO_API_URL && process.env.FUYAO_API_TOKEN);
-  }
-
-  async getKline(code: string, start: string, end: string): Promise<MarketDataResult> {
-    const base = process.env.FUYAO_API_URL as string;
-    const token = process.env.FUYAO_API_TOKEN as string;
-    const url = `${base.replace(/\/$/, '')}/kline?code=${encodeURIComponent(code)}&start=${start}&end=${end}`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10_000);
-    try {
-      const resp = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-        signal: controller.signal,
-        cache: 'no-store',
-      });
-      if (!resp.ok) throw new Error(`扶摇行情服务返回 HTTP ${resp.status}`);
-      const body = (await resp.json()) as {
-        data?: { quote?: MarketQuote; kline?: KlinePoint[] };
-      };
-      return {
-        origin: 'fuyao',
-        quote: body.data?.quote ?? null,
-        kline: body.data?.kline ?? [],
-        warnings: [],
-      };
-    } finally {
-      clearTimeout(timer);
-    }
-  }
 }
 
 // ---------- 演示降级行情（确定性生成，注入事件窗口异动） ----------
@@ -170,7 +136,7 @@ const globalForMarket = globalThis as unknown as {
 };
 
 // 版本戳：适配器选择链结构变更时递增（防 dev 热更后旧单例缺少新源）
-const MARKET_ADAPTER_VERSION = 2;
+const MARKET_ADAPTER_VERSION = 3;
 
 export function getMarketAdapter(): MarketDataAdapter {
   const cached = globalForMarket.__marketAdapter;

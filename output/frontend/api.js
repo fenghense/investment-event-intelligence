@@ -53,6 +53,14 @@
           if (!data || !data.event || !Array.isArray(data.evidence)) throw new Error('后端事件详情格式不正确');
           return data;
         });
+      },
+      market: function (code) {
+        return request('/api/market/' + encodeURIComponent(code)).then(function (data) {
+          if (!data || ['fuyao', 'ifind', 'fallback'].indexOf(data.origin) < 0 || !Array.isArray(data.kline)) {
+            throw new Error('后端行情格式不正确');
+          }
+          return data;
+        });
       }
     };
   }

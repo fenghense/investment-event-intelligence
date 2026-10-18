@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getMarketAdapter, MockMarketAdapter } from '@/lib/adapters/fuyao/marketAdapter';
 
 // 行情数据：事件详情页影响分析图表使用
-// 扶摇未配置时返回演示降级行情（origin:'fallback'，前端必须标注）
+// 优先扶摇，其次已配置的 iFinD；均未配置时显式返回演示行情。
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ code: string }> },

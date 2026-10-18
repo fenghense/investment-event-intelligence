@@ -43,6 +43,16 @@ test('detail loads evidence from its dedicated endpoint', async () => {
   assert.equal(url, 'https://api.example.com/api/events/EVT%2F1');
 });
 
+test('market loads the backend endpoint and preserves explicit origin', async () => {
+  let url;
+  const data = { origin: 'fuyao', quote: null, kline: [], warnings: ['暂无数据'] };
+  const client = createClient({ baseUrl: 'https://api.example.com', fetchImpl: async value => { url = value; return response(data); } });
+  assert.deepEqual(await client.market('300750.SZ'), data);
+  assert.equal(url, 'https://api.example.com/api/market/300750.SZ');
+  const invalid = createClient({ baseUrl: 'https://api.example.com', fetchImpl: async () => response({kline: []}) });
+  await assert.rejects(invalid.market('300750'), /格式/);
+});
+
 test('HTTP failures, HTML login pages, malformed data and network errors reject', async () => {
   for (const fetchImpl of [
     async () => response({}, 503),
@@ -145,4 +155,48 @@ test('closing a loading detail prevents it from reopening after the response', a
   resolveDetail({ event: { id: 'EVT-1' }, evidence: [] });
   await settle();
   assert.equal(element('detail-mask').hidden, true);
+});
+
+test('remote detail loads Fuyao quote and preserves evidence when market fails', async () => {
+  for (const fail of [false, true]) {
+    const event = {id: 'EVT-1', subjectCode: '300750', title: '测试事件'};
+    const {context, element} = loadApp({
+      configured: true, search: async () => ({events: [event]}),
+      detail: async () => ({event, evidence: [{title: '真实证据'}]}),
+      market: async () => {
+        if (fail) throw new Error('upstream failed');
+        return {origin: 'fuyao', quote: {price: 100, pctChange: 1.2, updatedAt: '2026-10-16T07:00:00Z'}, kline: [], warnings: []};
+      }
+    });
+    await settle(); context.openDetail(context.currentList[0]); await settle();
+    assert.match(element('detail-body').innerHTML, /真实证据/);
+    assert.match(element('detail-market').innerHTML, fail ? /暂时无法加载/ : /扶摇.*100\.00 CNY/);
+  }
+});
+
+test('closing detail ignores a late quote and does not reopen the mask', async () => {
+  let finishMarket;
+  const event = {id: 'EVT-1', subjectCode: '300750'};
+  const {context, element} = loadApp({
+    configured: true, search: async () => ({events: [event]}),
+    detail: async () => ({event, evidence: []}),
+    market: () => new Promise(resolve => { finishMarket = resolve; })
+  });
+  await settle(); context.openDetail(context.currentList[0]); await settle();
+  context.closeDetail();
+  finishMarket({origin: 'fuyao', quote: null, kline: [], warnings: []}); await settle();
+  assert.equal(element('detail-mask').hidden, true);
+  assert.doesNotMatch(element('detail-market').innerHTML, /来源/);
+});
+
+test('placeholder subjects do not trigger market calls', async () => {
+  let calls = 0;
+  const event = {id: 'EVT-1', subjectCode: 'NAME-测试'};
+  const {context, element} = loadApp({
+    configured: true, search: async () => ({events: [event]}),
+    detail: async () => ({event, evidence: []}), market: async () => {calls++;}
+  });
+  await settle(); context.openDetail(context.currentList[0]); await settle();
+  assert.equal(calls, 0);
+  assert.match(element('detail-market').innerHTML, /没有有效的 A 股代码/);
 });

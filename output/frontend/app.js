@@ -245,7 +245,9 @@ function openDetail(e) {
   document.getElementById('detail-body').innerHTML = '<p>正在加载证据时间线…</p>';
   apiClient.detail(e.id).then(function (data) {
     if (sequence !== detailSequence) return;
-    renderDetail(normalizeEvent(Object.assign({}, data.event, { evidences: data.evidence })));
+    var detail = normalizeEvent(Object.assign({}, data.event, { evidences: data.evidence }));
+    renderDetail(detail);
+    loadDetailMarket(detail, sequence);
   }).catch(function () {
     if (sequence !== detailSequence) return;
     document.getElementById('detail-body').innerHTML = '<p>证据详情暂时无法加载，请关闭后重试。</p>';
@@ -277,6 +279,7 @@ function renderDetail(e) {
       '<span class="credibility">' + escapeHtml(e.credibilityText) + '</span>' +
     '</div>' +
     '<div class="detail-section"><h3>摘要</h3><p>' + escapeHtml(e.summary) + '</p></div>' +
+    (currentOrigin === 'remote' ? '<div class="detail-section" id="detail-market"><h3>行情验证</h3><p>正在加载标的行情…</p></div>' : '') +
     '<div class="detail-section"><h3>证据时间线（高权重 ' + high.length + ' 条）</h3>' +
       (high.map(function (ev) { return evItem(ev, false); }).join('') || '<p style="color:var(--ink-3)">暂无</p>') +
     '</div>' +
@@ -294,6 +297,47 @@ function renderDetail(e) {
 
   document.getElementById('detail-mask').hidden = false;
   document.body.style.overflow = 'hidden';
+}
+
+function loadDetailMarket(e, sequence) {
+  var panel = document.getElementById('detail-market');
+  if (!panel) return;
+  if (!/^(?:[03648]\d{5}|92\d{4})(?:\.(?:SH|SZ|BJ))?$/i.test(e.subjectCode || '')) {
+    panel.innerHTML = '<h3>行情验证</h3><p>该主体没有有效的 A 股代码，暂无行情验证数据。</p>';
+    return;
+  }
+  apiClient.market(e.subjectCode).then(function (market) {
+    if (sequence !== detailSequence) return;
+    renderDetailMarket(panel, market);
+  }).catch(function () {
+    if (sequence !== detailSequence) return;
+    panel.innerHTML = '<h3>行情验证</h3><p class="market-warning">行情暂时无法加载，请稍后关闭详情并重试；证据时间线不受影响。</p>';
+  });
+}
+
+function renderDetailMarket(panel, market) {
+  var source = { fuyao: '扶摇 · 同花顺金融数据 API', ifind: 'iFinD 股票行情', fallback: '演示行情（非真实数据）' }[market.origin];
+  var quote = market.quote;
+  var validQuote = quote && typeof quote.price === 'number' && Number.isFinite(quote.price)
+    && typeof quote.pctChange === 'number' && Number.isFinite(quote.pctChange);
+  var bars = market.kline.filter(function (bar) { return typeof bar.close === 'number' && Number.isFinite(bar.close) && bar.close > 0; });
+  var chart = '';
+  if (bars.length > 1) {
+    var prices = bars.map(function (bar) { return bar.close; });
+    var min = Math.min.apply(null, prices), max = Math.max.apply(null, prices);
+    var points = bars.map(function (bar, i) {
+      return (12 + i * 576 / (bars.length - 1)).toFixed(1) + ',' + (110 - (bar.close - min) * 92 / (max - min || 1)).toFixed(1);
+    }).join(' ');
+    chart = '<svg class="market-chart" viewBox="0 0 600 125" role="img" aria-label="近40天日收盘价走势">' +
+      '<polyline fill="none" stroke="' + (prices[prices.length - 1] >= prices[0] ? '#D93025' : '#0DA678') + '" stroke-width="2" points="' + points + '"/></svg>' +
+      '<div class="market-dates"><span>' + escapeHtml(bars[0].date) + '</span><span>' + escapeHtml(bars[bars.length - 1].date) + '</span></div>';
+  }
+  panel.innerHTML = '<h3>行情验证</h3><p class="market-source">来源：' + escapeHtml(source) + '</p>' +
+    (validQuote ? '<div class="market-quote"><strong>' + quote.price.toFixed(2) + ' CNY</strong>' +
+      '<span class="' + (quote.pctChange > 0 ? 'market-up' : quote.pctChange < 0 ? 'market-down' : 'market-flat') + '">' + (quote.pctChange > 0 ? '+' : '') + quote.pctChange.toFixed(2) + '%</span></div>' +
+      '<p class="market-note">报价时间：' + escapeHtml(fmtTime(quote.updatedAt)) + '</p>' : '<p>暂无有效报价。</p>') +
+    chart + '<p class="market-note">日收盘价' + (market.origin === 'fuyao' ? '（前复权）' : '') + ' · ' + bars.length + ' 个交易日。行情仅供事件核验，不构成投资建议。</p>' +
+    (market.warnings || []).map(function (warning) { return '<p class="market-warning">' + escapeHtml(warning) + '</p>'; }).join('');
 }
 
 function closeDetail() {

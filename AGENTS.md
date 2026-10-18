@@ -84,7 +84,8 @@ src/lib/
 │   │   ├── mcpClient.ts    # JSON-RPC 客户端：会话(mcp-session-id)/≥1s限流/指数退避重试/SSE解析/调用计数
 │   │   └── adapter.ts      # IfindSourceAdapter：search_notice+search_news 字段映射、缓存(公告24h/新闻12h)、降级链
 │   └── fuyao/
-│       └── marketAdapter.ts # 扶摇行情：MarketDataAdapter 接口 + FuyaoHttpAdapter(env 骨架) + MockMarketAdapter(确定性演示行情) + computeImpact(事件窗口量价异动)
+│       ├── httpAdapter.ts   # 扶摇真实 REST：X-api-key、快照/日K、业务码校验、字段与单位转换
+│       └── marketAdapter.ts # MarketDataAdapter 接口 + 适配器选择 + MockMarketAdapter + computeImpact
 ├── workflows/               # Agent 工作流（节点化，每节点产出 WorkflowNodeTrace 轨迹）
 │   ├── types.ts             # WorkflowNodeTrace/WorkflowWarning + timed/timedAsync + callLlmJson(LLM JSON 调用)
 │   ├── w1Ingestion.ts       # W1 事件采集与去重：数据采集→规则抽取→dedup 聚类→LLM 实体链接(并查集合并，≤5 对/次)
@@ -137,6 +138,7 @@ src/lib/
 - **W1 事件采集与去重**（`w1Ingestion.ts`）：节点 1 数据采集为多源并行（iFinD 公告+新闻 / 巨潮公开公告 / 财经媒体按 query 过滤，单源失败不拖垮）；节点 2 规则抽取（实体库=种子标的+store 已建档标的，`rawFields.secName/stockCodes` 兜底主体）；节点 3 三级去重——dedup_key 聚类 → **标题归一化规则归并**（去「海外监管公告/H股公告」前缀+日期+标点后相同或互相包含，主体一致或一方缺失）→ **LLM 实体链接**（候选对=要素重叠或标题 bigram Jaccard≥0.55，按 0.6×标题相似+0.4×要素重叠打分取 top5，并查集合并 same&&conf≥0.6 的簇）。提示词明确「同一事项的进展/演化节点（回购方案→进展→完成）属同一事件」。输出 `clusters`（W1E-xxx、标题格式「主体·动作」、mergedByLlm 标记）+ `linkDecisions`（判定理由可追溯）。
 - **`callLlmJson`（workflows/types.ts）**：统一 LLM JSON 调用，**必须经 `sanitizeForwardHeaders` 过滤 hop-by-hop 头**（content-length/host/connection 等会使 LLM 网关按错误长度等 body 挂起）；默认 45s 超时保护（Promise.race），W1 实体链接用 25s；失败抛错由调用方显式降级并在 warnings 标注，禁止静默伪造。
 - 行情适配器选择链（`getMarketAdapter()`，globalThis 单例带 `MARKET_ADAPTER_VERSION` 版本戳）：FuyaoHttpAdapter（`FUYAO_API_URL`）→ **IfindStockAdapter（`IFIND_STOCK_MCP_URL`，真实 A 股行情）** → MockMarketAdapter（演示降级）。`MarketOrigin = 'fuyao' | 'ifind' | 'fallback'` 三态，前端按 origin 标注（ifind="iFinD 实时行情"徽标）。
+- 扶摇真实平台为 `https://fuyao.aicubes.cn`，`FUYAO_API_TOKEN` 通过 `X-api-key` 发送，禁止 Bearer 或旧 `/kline` 假定。路径 `/api/a-share/prices/{snapshot,historical}`；严格校验业务 `code=0` 和 `data.item`；代码带 SH/SZ/BJ，日期为上海时区毫秒，成交量股→手。失败/空结果不伪造成演示数据；一分钟有界缓存和并发去重。Pages 详情行情区通过同一后端 `/api/market/{code}` 展示来源、报价、日线及错误。
 - **iFinD 股票行情（`src/lib/adapters/ifind/stockAdapter.ts`）**：ds-stock-mcp 10 个工具全为自然语言 query 驱动（tools/list 实测：get_stock_performance/get_stock_summary/get_stock_info/search_stocks/stock_highfreq_quotes 等）。`getKline` 调 get_stock_performance，返回 `data.answer` Markdown 表格（|证券代码|日期|最高价|收盘价|成交量|最低价|开盘价|涨跌幅|，`extractRows` 键列表已加 `answer`），日期 YYYYMMDD、成交量带"万/亿"单位（parseCnNumber）、非交易日行仅收盘价须过滤；30min 缓存。`getProfile` 调 get_stock_summary 取概况原文（6h 缓存），供标的页"行业与板块"卡。
 - 行情接口 `GET /api/market/[code]?start&end&eventDate&sentiment`；搜索接口 `GET /api/search?q=`（含 emptyHints/suggestions 空状态指引）。
 - **搜索实时接入（核心动线）**：`GET /api/search?q=&live=1` 并行拉取巨潮（searchkey=q，支持公司名/代码）+ iFinD fetchLiveNews + 财经媒体（本地按 q 过滤），逐条 `store.ingest({extractorMode:'rules', requireSubject:true})` 幂等接入主链路，返回合并后的本地+实时事件与 `live:{fetched,ingested,skipped,errors,sources[]}` 报告。q 判定为实体名（`isEntityLike`：2-12 字、非纯数字、非通用词黑名单）时给无 secName 的条目注入 `rawFields.companyName=q` 辅助主体归属。前端 `/search` 两段式：先本地快速返回，再自动触发 live=1（状态条展示来源徽标与接入统计），空结果等 live 完成后再出指引。

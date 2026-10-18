@@ -10,6 +10,9 @@ import {
 } from '@/lib/adapters/fuyao/marketAdapter';
 import { IfindStockAdapter } from '@/lib/adapters/ifind/stockAdapter';
 
+// Reuse the profile adapter so its six-hour cache survives individual requests.
+const ifindProfileAdapter = new IfindStockAdapter();
+
 function shiftDate(dateStr: string, days: number): string {
   const d = new Date(`${dateStr}T00:00:00`);
   d.setDate(d.getDate() + days);
@@ -69,8 +72,10 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     } catch (err) {
       warnings.push(`行情拉取失败：${err instanceof Error ? err.message : String(err)}`);
     }
-    if (adapter instanceof IfindStockAdapter) {
-      profile = await adapter.getProfile(code, target.name);
+    // 扶摇提供行情时，仍保留独立的 iFinD 公司概况能力。
+    const profileAdapter = adapter instanceof IfindStockAdapter ? adapter : ifindProfileAdapter;
+    if (profileAdapter.isConfigured()) {
+      profile = await profileAdapter.getProfile(code, target.name);
     }
   } else {
     warnings.push('该标的为非 A 股建档主体（无标准证券代码），暂无行情验证数据');

@@ -30,10 +30,12 @@
 | `IFIND_MCP_URL` | 使用 `.env.example` 已提供的公告 / 新闻 MCP 地址；服务商更换端点时再更新 |
 | `IFIND_API_TOKEN` | iFinD 提供的 MCP Token 本体；不含 `Bearer ` 前缀，代码会自动添加 |
 | `IFIND_STOCK_MCP_URL` | 使用 `.env.example` 已提供的 A 股行情 MCP 地址；复用同一个 iFinD Token |
-| `FUYAO_API_URL` | 可选，扶摇 HTTP 行情服务的基础地址，不包含末尾 `/kline` |
-| `FUYAO_API_TOKEN` | 可选，与上一个地址配套的扶摇 Token 本体 |
+| `FUYAO_API_URL` | `https://fuyao.aicubes.cn`，不含 `/admin` 或 `/api` |
+| `FUYAO_API_TOKEN` | 扶摇「API Key 管理」签发的 API Key 原文，服务端放入 `X-api-key` 请求头 |
 
-不使用扶摇时，最后两项均留空。只有扶摇 Token 而没有服务地址时，不能启用扶摇行情；可以先使用 iFinD 行情。
+扶摇负责行情快照和历史日 K 线；iFinD 继续负责新闻搜索和公司概况。扶摇未配置完整时，行情使用已配置的 iFinD。调用失败会显式报错或标注部分数据缺失，不冒充成功。
+
+扶摇官方契约：[快速开始](https://fuyao.aicubes.cn/docs/quickstart/)、[股票行情](https://fuyao.aicubes.cn/docs/api-reference/prices/)。真实路径是 `/api/a-share/prices/snapshot` 和 `/api/a-share/prices/historical`，不是 `/kline`。业务错误通过 JSON `code` 表达，即使 HTTP 200 也必须检查 `code === 0`。历史请求使用带交易所后缀的代码和上海时区毫秒时间窗；成交量从股换算为领域层的手。
 
 ## 二、把后端运行起来
 
@@ -43,7 +45,7 @@
 
 1. 登录 Render，连接 GitHub，授权本仓库。
 2. 选择 **New → Blueprint**，选择本仓库和 `main` 分支，让 Render 读取 `render.yaml`。
-3. 在提示的 `IFIND_API_TOKEN` 输入框中填写 iFinD Token；接口地址已经配置好。创建前确认计划为 **Free**。
+3. 在提示中填写 `IFIND_API_TOKEN` 和 `FUYAO_API_TOKEN`；接口地址已经配置好。创建前确认计划为 **Free**。
 4. 等待服务变为 **Live**，复制实际分配的 `https://…onrender.com` 地址。不要按服务名猜域名，Render 可能添加后缀。
 5. 按下一节将这个地址填入 Pages 配置并提交。
 
@@ -51,7 +53,7 @@
 
 - Build Command：`corepack pnpm install --frozen-lockfile --registry=https://registry.npmjs.org && corepack pnpm exec next build --webpack`
 - Start Command：`corepack pnpm exec next start --hostname 0.0.0.0 --port $PORT`
-- 环境变量：`NODE_VERSION=24`、`NEXT_TELEMETRY_DISABLED=1`，以及模板中的三个 `IFIND_*` 变量。
+- 环境变量：`NODE_VERSION=24`、`NEXT_TELEMETRY_DISABLED=1`，以及模板中的三个 `IFIND_*` 和两个 `FUYAO_*` 变量。
 - Health Check Path：`/api/health`。
 - Auto-Deploy：每次提交自动部署（On Commit）。
 
@@ -99,6 +101,7 @@ window.APP_CONFIG = {
 2. 合法空列表呈现为空结果；已配置后端时的请求失败会明确报错，不再偷偷替换为演示数据。只有配置地址为空时才进入明确标注的离线演示模式。
 3. 根据 `live.sources` 展示各数据源有数据、无新数据或不可用；首页明确标记事件库可能包含初始化演示记录，HTTP 200 不等于上游实时取数成功。
 4. 点击事件后调用 `/api/events/{id}` 加载证据；关闭弹窗后晚到的响应不会重新打开弹窗，旧搜索结果也不会覆盖新搜索。
+5. 有有效 A 股主体代码的事件详情会请求 `/api/market/{code}`，显示来源、报价及日收盘价走势；扶摇为前复权日线。行情失败不影响证据展示，演示行情明确标注。
 
 配置提交后，GitHub Pages 会按已有分支发布设置自动更新；Render 也会按 `main` 的提交自动部署。两者互相独立，首次接通必须等后端部署成功并填写其真实地址。API 密钥不进入 Pages 文件。
 
@@ -110,7 +113,8 @@ window.APP_CONFIG = {
 2. `GET /api/ifind/quota`：`configured: true` 仅表示配置值非空，不验证 Token 是否有效。
 3. `GET /api/search?q=宁德时代&live=1`：会实际调用数据源并消耗其额度；检查 `live.sources` 中 `ifind` 的状态及错误信息。`ok` 是有数据，`empty` 是成功但无结果，`failed` 是调用失败。
 4. 从 Pages 发起请求，确认浏览器 Network 中请求发往后端域名，并且没有 CORS 或 HTTPS 错误。
+5. `GET /api/market/300750`：接通扶摇后应返回 `origin: "fuyao"`，核对 `quote`、`kline` 和 `warnings`；`origin` 本身不代表一定有有效数据。Pages 中打开宁德时代事件可看到同一结果。
 
-本地回归测试：`corepack pnpm run test:pages`。健康检查 `/api/health` 不调用上游 API、不消耗 iFinD 额度。
+本地回归测试：`corepack pnpm run test:pages` 和 `corepack pnpm run test:fuyao`。健康检查 `/api/health` 不调用上游 API、不消耗额度。
 
 如果 `Main.zip` 中包含旧密钥，即使本次展开的源码已排除密钥，该归档及旧提交仍可能公开包含它们；本次上传未修改你原先上传的归档。
